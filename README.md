@@ -1,6 +1,6 @@
 # spd-tactics-ios
 
-Ships [DaltonGoesFast/spd-tactics-builds](https://github.com/DaltonGoesFast/spd-tactics-builds) releases to TestFlight, and copies tester feedback back here as issues. The game lives upstream - this repo is only the iOS pipeline.
+A supporting utility for [SPD Tactics](https://github.com/DaltonGoesFast/spd-tactics-builds) - it ships the game's releases to TestFlight and copies tester feedback back here as issues. The game itself lives in [DaltonGoesFast/spd-tactics-builds](https://github.com/DaltonGoesFast/spd-tactics-builds); this repo is only the iOS pipeline.
 
 Join the beta: https://testflight.apple.com/join/nVbkc9dX
 
