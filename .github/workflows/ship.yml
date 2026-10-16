@@ -1,0 +1,107 @@
+name: Ship to TestFlight
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Upstream tag to ship now (skips the quiet-period and already-shipped checks)"
+        required: false
+
+concurrency: ship
+
+env:
+  GODOT_VERSION: 4.7.2
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      ship: ${{ steps.decide.outputs.ship }}
+      tag: ${{ steps.decide.outputs.tag }}
+      version: ${{ steps.decide.outputs.version }}
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -q pyjwt cryptography
+      - id: decide
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_TAG: ${{ inputs.tag }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          echo "$ASC_KEY_P8" > "$RUNNER_TEMP/key.p8"
+          ASC_KEY_PATH="$RUNNER_TEMP/key.p8" python3 tools/should_ship.py
+
+  ship:
+    needs: check
+    if: needs.check.outputs.ship == 'true'
+    runs-on: macos-26-arm64
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: DaltonGoesFast/spd-tactics-builds
+          ref: ${{ needs.check.outputs.tag }}
+          path: upstream
+
+      - name: Cache Godot
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/Library/Application Support/Godot/export_templates/${{ env.GODOT_VERSION }}.stable
+          key: godot-${{ env.GODOT_VERSION }}-macos
+      - name: Install Godot + export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          base=https://github.com/godotengine/godot/releases/download/$GODOT_VERSION-stable
+          mkdir -p ~/godot && cd ~/godot
+          curl -sSLo godot.zip "$base/Godot_v$GODOT_VERSION-stable_macos.universal.zip" && unzip -q godot.zip && rm godot.zip
+          curl -sSLo templates.tpz "$base/Godot_v$GODOT_VERSION-stable_export_templates.tpz"
+          dest="$HOME/Library/Application Support/Godot/export_templates/$GODOT_VERSION.stable"
+          mkdir -p "$dest" && unzip -q templates.tpz -d "$RUNNER_TEMP/tpl" && mv "$RUNNER_TEMP"/tpl/templates/* "$dest/" && rm templates.tpz
+
+      - name: Install signing cert, profile and API key
+        env:
+          DIST_CERT_P12: ${{ secrets.DIST_CERT_P12 }}
+          DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+          PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          kc="$RUNNER_TEMP/signing.keychain-db"; kp=$(openssl rand -hex 16)
+          security create-keychain -p "$kp" "$kc"
+          security set-keychain-settings -lut 3600 "$kc"
+          security unlock-keychain -p "$kp" "$kc"
+          echo "$DIST_CERT_P12" | base64 -d > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" -k "$kc" -P "$DIST_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -k "$kp" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          for d in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$d" && echo "$PROFILE" | base64 -d > "$d/spd-tactics-appstore.mobileprovision"
+          done
+          echo "$ASC_KEY_P8" > "$RUNNER_TEMP/key.p8"
+          rm "$RUNNER_TEMP/dist.p12"
+
+      - name: Build and upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: GODOT="$HOME/godot/Godot.app/Contents/MacOS/Godot" ASC_KEY_PATH="$RUNNER_TEMP/key.p8" tools/build_ios.sh "$GITHUB_WORKSPACE/upstream" "${{ needs.check.outputs.version }}" "${{ needs.check.outputs.build }}"
+
+      - name: Send to Community testers
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          pip3 install -q --break-system-packages pyjwt cryptography
+          ASC_KEY_PATH="$RUNNER_TEMP/key.p8" python3 tools/post_upload.py "${{ needs.check.outputs.version }}" "${{ needs.check.outputs.build }}"
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
