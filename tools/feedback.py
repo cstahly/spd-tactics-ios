@@ -27,8 +27,8 @@ def filed():
 
 def build_of(kind, fid):
     try:
-        b = asc.request("/v1/%s/%s/build" % (kind, fid))["data"]["attributes"]["version"]
-        return "build " + b
+        inc = asc.request("/v1/%s/%s?include=build" % (kind, fid)).get("included", [])
+        return "build " + inc[0]["attributes"]["version"]
     except Exception:
         return "build ?"
 
