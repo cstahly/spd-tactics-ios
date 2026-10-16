@@ -43,7 +43,7 @@ jobs:
   ship:
     needs: check
     if: needs.check.outputs.ship == 'true'
-    runs-on: macos-26-arm64
+    runs-on: macos-26
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
