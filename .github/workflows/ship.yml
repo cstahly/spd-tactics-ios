@@ -8,6 +8,10 @@ on:
       tag:
         description: "Upstream tag to ship now (skips the quiet-period and already-shipped checks)"
         required: false
+      dry_run:
+        description: "Build and sign but don't upload"
+        type: boolean
+        default: false
 
 concurrency: ship
 
@@ -90,11 +94,13 @@ jobs:
 
       - name: Build and upload
         env:
+          DRY_RUN: ${{ inputs.dry_run }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: GODOT="$HOME/godot/Godot.app/Contents/MacOS/Godot" ASC_KEY_PATH="$RUNNER_TEMP/key.p8" tools/build_ios.sh "$GITHUB_WORKSPACE/upstream" "${{ needs.check.outputs.version }}" "${{ needs.check.outputs.build }}"
 
       - name: Send to Community testers
+        if: ${{ !inputs.dry_run }}
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}

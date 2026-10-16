@@ -27,6 +27,8 @@ xcodebuild -project builds/ios/spd-tactics.xcodeproj -scheme spd-tactics -config
   -destination 'generic/platform=iOS' -archivePath builds/ios/SPDTactics.xcarchive \
   CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM=$TEAM CODE_SIGN_IDENTITY="Apple Distribution" \
   PROVISIONING_PROFILE_SPECIFIER="$PROFILE" archive | tail -5
+[ -d builds/ios/SPDTactics.xcarchive ] || { echo "archive failed"; exit 1; }
+[ "${DRY_RUN:-}" = true ] && { echo "dry run: signed archive built, skipping upload"; exit 0; }
 
 xcodebuild -exportArchive -archivePath builds/ios/SPDTactics.xcarchive \
   -exportOptionsPlist "$HERE/UploadOptions.plist" -exportPath builds/ios/export \
