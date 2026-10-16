@@ -1,49 +1,57 @@
-"""Decide whether Dalton's latest release should go to TestFlight.
+"""Decide whether Dalton's main branch should go to TestFlight.
 
-Ships when the latest upstream release has no matching version in App Store
-Connect yet and has been out for QUIET_HOURS, so a burst of releases goes out
-as one build. Writes tag/version/build to $GITHUB_OUTPUT.
+Ships when main has moved past the last shipped commit (state/last-shipped) and
+has been quiet for QUIET_HOURS, so a burst of merged PRs goes out as one build.
+Writes sha/version/build to $GITHUB_OUTPUT.
 """
+import base64
 import datetime
 import json
 import os
+import re
 import subprocess
-import sys
 
 import asc
 
 UPSTREAM = "DaltonGoesFast/spd-tactics-builds"
 QUIET_HOURS = float(os.environ.get("QUIET_HOURS", "2"))
+STATE = os.path.join(os.path.dirname(__file__), "..", "state", "last-shipped")
 
 
-def gh(*args):
-    return json.loads(subprocess.check_output(["gh", "api", *args]))
+def gh(path):
+    return json.loads(subprocess.check_output(["gh", "api", path]))
 
 
 def main():
-    force = os.environ.get("FORCE_TAG", "").strip()
-    rel = gh("repos/%s/releases/%s" % (UPSTREAM, "tags/" + force if force else "latest"))
-    tag = rel["tag_name"]
-    version = tag.lstrip("v")
-    published = datetime.datetime.fromisoformat(rel["published_at"].replace("Z", "+00:00"))
-    age = (datetime.datetime.now(datetime.timezone.utc) - published).total_seconds() / 3600
+    force = os.environ.get("FORCE_REF", "").strip()
+    commit = gh("repos/%s/commits/%s" % (UPSTREAM, force or "main"))
+    sha = commit["sha"]
+    when = datetime.datetime.fromisoformat(commit["commit"]["committer"]["date"].replace("Z", "+00:00"))
+    age = (datetime.datetime.now(datetime.timezone.utc) - when).total_seconds() / 3600
 
-    shipped = asc.request("/v1/preReleaseVersions?filter[app]=%s&filter[version]=%s" % (asc.APP_ID, version))["data"]
-    latest = asc.request("/v1/builds?filter[app]=%s&sort=-uploadedDate&limit=20" % asc.APP_ID)["data"]
-    next_build = max([int(b["attributes"]["version"]) for b in latest] or [0]) + 1
+    presets = base64.b64decode(gh("repos/%s/contents/export_presets.cfg?ref=%s" % (UPSTREAM, sha))["content"]).decode()
+    ios = presets[presets.index('name="iOS"'):]
+    version = re.search(r'^application/short_version="([^"]+)"', ios, re.M).group(1)
+
+    last = open(STATE).read().strip() if os.path.exists(STATE) else ""
+    builds = asc.request("/v1/builds?filter[app]=%s&sort=-uploadedDate&limit=20" % asc.APP_ID)["data"]
+    next_build = max([int(b["attributes"]["version"]) for b in builds] or [0]) + 1
 
     ship = False
-    if shipped and not force:
-        print("%s is already in TestFlight" % tag)
-    elif age < QUIET_HOURS and not force:
-        print("%s is %.1fh old; waiting for %gh of quiet" % (tag, age, QUIET_HOURS))
+    if force:
+        ship = True
+    elif sha == last:
+        print("main (%s) is already in TestFlight" % sha[:7])
+    elif age < QUIET_HOURS:
+        print("main (%s) moved %.1fh ago; waiting for %gh of quiet" % (sha[:7], age, QUIET_HOURS))
     else:
         ship = True
-        print("shipping %s as build %d" % (tag, next_build))
+    if ship:
+        print("shipping %s as %s (%d)" % (sha[:7], version, next_build))
 
     with open(os.environ.get("GITHUB_OUTPUT", "/dev/stdout"), "a") as out:
-        out.write("ship=%s\ntag=%s\nversion=%s\nbuild=%d\n" % (str(ship).lower(), tag, version, next_build))
+        out.write("ship=%s\nsha=%s\nversion=%s\nbuild=%d\n" % (str(ship).lower(), sha, version, next_build))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

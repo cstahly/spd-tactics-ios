@@ -6,7 +6,7 @@ Join the beta: https://testflight.apple.com/join/nVbkc9dX
 
 ## What runs
 
-- **Ship to TestFlight** (every 6 hours): if Dalton's latest release isn't in TestFlight yet and has been out for 2 hours, build it on a macOS runner, upload it, and submit it for beta review for the Community group. The 2-hour wait means a burst of releases ships once. Run it by hand with a tag to ship one right away.
+- **Ship to TestFlight** (every 6 hours): if upstream `main` has moved since the last shipped commit (`state/last-shipped`) and has been quiet for 2 hours, build it on a macOS runner, upload it, and submit it for beta review for the Community group. The 2-hour wait means a burst of merged PRs ships once. Run it by hand to ship `main` (or any ref) right away.
 - **Collect TestFlight feedback** (every 3 hours): new screenshot feedback and crash reports become issues labelled `testflight`. Screenshots are saved in `feedback/` because Apple deletes them after about a week. Tester emails are never copied.
 
 ## Secrets
