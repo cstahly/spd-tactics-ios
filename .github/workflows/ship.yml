@@ -28,6 +28,7 @@ jobs:
       ship: ${{ steps.decide.outputs.ship }}
       sha: ${{ steps.decide.outputs.sha }}
       version: ${{ steps.decide.outputs.version }}
+      upstream_version: ${{ steps.decide.outputs.upstream_version }}
       build: ${{ steps.decide.outputs.build }}
     steps:
       - uses: actions/checkout@v4
@@ -109,7 +110,7 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
           pip3 install -q --break-system-packages pyjwt cryptography
-          ASC_KEY_PATH="$RUNNER_TEMP/key.p8" python3 tools/post_upload.py "${{ needs.check.outputs.version }}" "${{ needs.check.outputs.build }}"
+          ASC_KEY_PATH="$RUNNER_TEMP/key.p8" python3 tools/post_upload.py "${{ needs.check.outputs.version }}" "${{ needs.check.outputs.build }}" "${{ needs.check.outputs.upstream_version }}" "${{ needs.check.outputs.sha }}"
 
       - name: Record the shipped commit
         if: ${{ !inputs.dry_run }}
@@ -117,7 +118,7 @@ jobs:
           mkdir -p state && echo "${{ needs.check.outputs.sha }}" > state/last-shipped
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add state && git commit -qm "Shipped ${{ needs.check.outputs.version }} (${{ needs.check.outputs.build }}) from upstream ${{ needs.check.outputs.sha }}"
+          git add state && git commit -qm "Shipped ${{ needs.check.outputs.upstream_version }} as ${{ needs.check.outputs.version }} (${{ needs.check.outputs.build }}) from upstream ${{ needs.check.outputs.sha }}"
           git pull -q --rebase && git push -q
 
       - name: Clean up keychain

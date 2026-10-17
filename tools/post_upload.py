@@ -1,5 +1,6 @@
 """After an upload: wait for processing, set What to Test, hand the build to the
-Community group and submit it for beta review. Usage: post_upload.py <version> <build>"""
+Community group and submit it for beta review.
+Usage: post_upload.py <version> <build> <upstream version> <upstream sha>"""
 import sys
 import time
 
@@ -25,11 +26,12 @@ def find_build(version, build):
     sys.exit("timed out waiting for processing")
 
 
-def main(version, build):
+def main(version, build, upstream_version, sha):
     bid = find_build(version, build)
+    notes = "SPD Tactics %s (%s)\n\n%s" % (upstream_version, sha[:7], WHAT_TO_TEST)
     for loc in asc.request("/v1/builds/%s/betaBuildLocalizations" % bid)["data"]:
         asc.request("/v1/betaBuildLocalizations/" + loc["id"], "PATCH",
-                    {"data": {"type": "betaBuildLocalizations", "id": loc["id"], "attributes": {"whatsNew": WHAT_TO_TEST}}})
+                    {"data": {"type": "betaBuildLocalizations", "id": loc["id"], "attributes": {"whatsNew": notes}}})
     asc.request("/v1/betaGroups/%s/relationships/builds" % asc.COMMUNITY_GROUP, "POST",
                 {"data": [{"type": "builds", "id": bid}]})
     asc.request("/v1/betaAppReviewSubmissions", "POST",
@@ -38,4 +40,4 @@ def main(version, build):
 
 
 if __name__ == "__main__":
-    main(*sys.argv[1:3])
+    main(*sys.argv[1:5])

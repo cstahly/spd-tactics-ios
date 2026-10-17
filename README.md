@@ -7,6 +7,8 @@ Join the beta: https://testflight.apple.com/join/nVbkc9dX
 ## What runs
 
 - **Ship to TestFlight** (every 6 hours): if upstream `main` has moved since the last shipped commit (`state/last-shipped`) and has been quiet for 2 hours, build it on a macOS runner, upload it, and submit it for beta review for the Community group. The 2-hour wait means a burst of merged PRs ships once. Run it by hand to ship `main` (or any ref) right away.
+
+  The TestFlight version is the build date (`2026.10.17`), not Dalton's version. Apple beta-reviews the first build of each version, so this keeps external review to once a day; later builds that day usually skip it. Dalton's version and commit are in each build's What to Test note, and the game still shows its own version in Camp and Settings.
 - **Collect TestFlight feedback** (every 3 hours): new screenshot feedback and crash reports become issues labelled `testflight`. Screenshots are saved in `feedback/` because Apple deletes them after about a week. Tester emails are never copied.
 
 ## Secrets
